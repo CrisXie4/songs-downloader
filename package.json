@@ -1,0 +1,30 @@
+{
+  "name": "wangyiyun",
+  "version": "2.0.0",
+  "description": "一个简单易用的网易云音乐下载工具 - 模块化重构版",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "music",
+    "netease",
+    "download",
+    "vue",
+    "express"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.13.2",
+    "body-parser": "^2.2.1",
+    "cors": "^2.8.5",
+    "express": "^5.2.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

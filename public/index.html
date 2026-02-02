@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网易云音乐下载器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div id="app" v-cloak class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <div class="bg-netease-red p-2 rounded-lg">
+                        <i class="fas fa-music text-white"></i>
+                    </div>
+                    <h1 class="text-xl font-bold text-gray-800">网易云音乐下载器</h1>
+                </div>
+                <div class="text-sm text-gray-500">v2.0</div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow max-w-4xl mx-auto w-full px-4 py-8">
+            <!-- 版权警告 -->
+            <div class="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg">
+                <div class="flex items-start">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 mt-1 mr-3"></i>
+                    <div>
+                        <p class="text-sm text-gray-700 font-medium">版权提示</p>
+                        <p class="text-xs text-gray-600 mt-1">
+                            本工具仅供个人学习与技术研究使用。请尊重音乐版权，支持正版音乐。
+                            <a href="/pages/legal.html" class="text-yellow-600 hover:text-yellow-700 underline ml-1">查看法律声明</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex border-b border-gray-200 mb-8">
+                <button
+                    @click="activeTab = 'playlist'"
+                    :class="['px-6 py-3 text-sm font-medium transition-colors', activeTab === 'playlist' ? 'tab-active' : 'text-gray-500 hover:text-gray-700']"
+                >
+                    歌单下载
+                </button>
+                <button
+                    @click="activeTab = 'single'"
+                    :class="['px-6 py-3 text-sm font-medium transition-colors', activeTab === 'single' ? 'tab-active' : 'text-gray-500 hover:text-gray-700']"
+                >
+                    单曲下载
+                </button>
+                <button
+                    @click="activeTab = 'settings'"
+                    :class="['px-6 py-3 text-sm font-medium transition-colors', activeTab === 'settings' ? 'tab-active' : 'text-gray-500 hover:text-gray-700']"
+                >
+                    设置
+                </button>
+            </div>
+
+            <!-- Playlist Download View -->
+            <div v-if="activeTab === 'playlist'" class="space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">歌单ID或链接</label>
+                    <div class="flex space-x-2">
+                        <input
+                            v-model="playlistInput"
+                            type="text"
+                            placeholder="请输入歌单ID或链接..."
+                            class="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
+                        >
+                        <button
+                            @click="fetchPlaylist"
+                            :disabled="loading"
+                            class="bg-netease-red text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
+                        >
+                            <i v-if="loading" class="fas fa-spinner fa-spin mr-2"></i>
+                            获取歌单
+                        </button>
+                    </div>
+                    <p class="mt-2 text-xs text-gray-400">支持纯数字ID、完整链接或分享文本</p>
+                </div>
+
+                <!-- Playlist Results -->
+                <div v-if="playlistData" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                        <h3 class="font-medium text-gray-800">找到 {{ playlistData.songs.length }} 首歌曲</h3>
+                        <div class="space-x-2">
+                            <button @click="selectAll" class="text-sm text-netease-red hover:underline">全选</button>
+                            <button @click="selectNone" class="text-sm text-gray-500 hover:underline">取消全选</button>
+                        </div>
+                    </div>
+                    <div class="max-h-[400px] overflow-y-auto custom-scrollbar">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-2 w-10"></th>
+                                    <th class="px-4 py-2">歌曲</th>
+                                    <th class="px-4 py-2">歌手</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <tr v-for="(song, index) in playlistData.songs" :key="song.id" class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-4 py-3">
+                                        <input type="checkbox" v-model="selectedSongs" :value="song.id" class="rounded text-netease-red focus:ring-red-500">
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-gray-800">{{ song.name }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-500">{{ song.artists }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-4 border-t border-gray-100 flex justify-end">
+                        <button
+                            @click="downloadSelected"
+                            :disabled="selectedSongs.length === 0 || downloading"
+                            class="bg-netease-red text-white px-8 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
+                        >
+                            <i v-if="downloading" class="fas fa-spinner fa-spin mr-2"></i>
+                            下载选中歌曲 ({{ selectedSongs.length }})
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Single Song Download View -->
+            <div v-if="activeTab === 'single'" class="space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">歌曲ID或链接</label>
+                            <input
+                                v-model="singleInput"
+                                type="text"
+                                placeholder="请输入歌曲ID或链接..."
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
+                            >
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">歌曲名称 (可选)</label>
+                            <input
+                                v-model="singleName"
+                                type="text"
+                                placeholder="留空则使用默认名称"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
+                            >
+                        </div>
+                        <button
+                            @click="downloadSingle"
+                            :disabled="!singleInput || downloading"
+                            class="w-full bg-netease-red text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center font-medium"
+                        >
+                            <i v-if="downloading" class="fas fa-spinner fa-spin mr-2"></i>
+                            立即下载
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div v-if="activeTab === 'settings'" class="space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-800 mb-4">API 源设置</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div
+                                @click="settings.apiSource = 'original'"
+                                :class="['p-4 border rounded-xl cursor-pointer transition-all', settings.apiSource === 'original' ? 'border-netease-red bg-red-50' : 'border-gray-200 hover:border-gray-300']"
+                            >
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="font-medium" :class="settings.apiSource === 'original' ? 'netease-red' : 'text-gray-700'">原始 API</span>
+                                    <i v-if="settings.apiSource === 'original'" class="fas fa-check-circle netease-red"></i>
+                                </div>
+                                <p class="text-xs text-gray-500">api.paugram.com<br>仅支持网易云音乐</p>
+                            </div>
+                            <div
+                                @click="settings.apiSource = 'gdstudio'"
+                                :class="['p-4 border rounded-xl cursor-pointer transition-all', settings.apiSource === 'gdstudio' ? 'border-netease-red bg-red-50' : 'border-gray-200 hover:border-gray-300']"
+                            >
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="font-medium" :class="settings.apiSource === 'gdstudio' ? 'netease-red' : 'text-gray-700'">GD Studio API</span>
+                                    <i v-if="settings.apiSource === 'gdstudio'" class="fas fa-check-circle netease-red"></i>
+                                </div>
+                                <p class="text-xs text-gray-500">music-api.gdstudio.xyz<br>支持多音乐源</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="settings.apiSource === 'gdstudio'" class="space-y-6 pt-4 border-t border-gray-100">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-3">音乐源选择</label>
+                            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <button
+                                    v-for="source in musicSources"
+                                    :key="source.id"
+                                    @click="settings.musicSource = source.id"
+                                    :class="['px-4 py-2 text-sm border rounded-lg transition-all', settings.musicSource === source.id ? 'bg-netease-red text-white border-netease-red' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300']"
+                                >
+                                    {{ source.name }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-3">音质选择</label>
+                            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                <button
+                                    v-for="q in qualityOptions"
+                                    :key="q.value"
+                                    @click="settings.musicQuality = q.value"
+                                    :class="['px-3 py-2 text-sm border rounded-lg transition-all', settings.musicQuality === q.value ? 'bg-netease-red text-white border-netease-red' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300']"
+                                >
+                                    {{ q.label }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-6 border-t border-gray-100">
+                        <button
+                            @click="saveSettings"
+                            class="w-full bg-gray-800 text-white px-6 py-3 rounded-lg hover:bg-black transition-colors font-medium"
+                        >
+                            保存配置
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-white border-t border-gray-200 py-6">
+            <div class="max-w-4xl mx-auto px-4 text-center">
+                <p class="text-sm text-gray-500 mb-2">本工具仅供个人学习与技术研究使用</p>
+                <p class="text-xs text-gray-400 mb-2">Made By CrisXie</p>
+                <div class="flex justify-center space-x-4 text-xs text-gray-400">
+                    <a href="https://github.com" target="_blank" class="hover:text-netease-red transition-colors">GitHub</a>
+                    <span>|</span>
+                    <a href="/pages/legal.html" class="hover:text-netease-red transition-colors">法律声明</a>
+                    <span>|</span>
+                    <a href="https://music.163.com" target="_blank" class="hover:text-netease-red transition-colors">支持正版</a>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Toast Notification -->
+        <div v-if="toast" class="toast-notification">
+            <i :class="['fas', toast.type === 'success' ? 'fa-check-circle text-green-400' : 'fa-exclamation-circle text-red-400']"></i>
+            <span class="text-sm">{{ toast.message }}</span>
+        </div>
+
+        <!-- Download Progress -->
+        <div v-if="downloadProgress" class="download-progress">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-700">下载进度</span>
+                <span class="text-xs text-gray-500">{{ downloadProgress.current }}/{{ downloadProgress.total }}</span>
+            </div>
+            <div class="progress-bar mb-2">
+                <div class="progress-bar-fill" :style="{ width: (downloadProgress.current / downloadProgress.total * 100) + '%' }"></div>
+            </div>
+            <p class="text-xs text-gray-500 truncate">{{ downloadProgress.currentSong }}</p>
+        </div>
+
+        <!-- Agreement Modal (first visit) -->
+        <div v-if="showAgreementModal" class="fixed inset-0 z-[100] flex items-center justify-center px-4">
+            <div class="absolute inset-0 bg-black/60"></div>
+            <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+                <div class="px-6 py-5 border-b border-gray-100">
+                    <h2 class="text-lg font-semibold text-gray-900">使用前请先确认法律声明</h2>
+                    <p class="mt-1 text-xs text-gray-500">首次进入需要确认，确认后本浏览器不再提示。</p>
+                </div>
+                <div class="px-6 py-5 space-y-4">
+                    <p class="text-sm text-gray-700 leading-6">
+                        本工具仅供个人学习与技术研究使用。请尊重音乐版权，支持正版音乐。
+                    </p>
+                    <div class="text-sm">
+                        <a href="/pages/legal.html" target="_blank" class="text-netease-red hover:underline">查看《法律声明》</a>
+                    </div>
+                    <label class="flex items-start space-x-3">
+                        <input type="checkbox" v-model="agreementChecked" class="mt-1 rounded text-netease-red focus:ring-red-500">
+                        <span class="text-sm text-gray-700">我已阅读并同意《法律声明》，并承诺仅用于个人学习与研究</span>
+                    </label>
+                </div>
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end space-x-3">
+                    <button @click="declineAgreement" class="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">不同意</button>
+                    <button @click="acceptAgreement" :disabled="!agreementChecked" class="px-5 py-2 text-sm rounded-lg bg-netease-red text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">同意并继续</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
