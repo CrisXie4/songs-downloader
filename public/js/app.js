@@ -24,6 +24,7 @@ createApp({
         // Single song state
         const singleInput = ref('');
         const singleName = ref('');
+        const singleArtists = ref('');
 
         // Settings state
         const settings = reactive({
@@ -173,35 +174,16 @@ createApp({
                 downloadProgress.value.currentSong = song.name;
 
                 try {
-                    // 获取下载URL
-                    const response = await fetch('/api/download/url', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            id: song.id,
-                            name: song.name,
-                            artists: song.artists
-                        })
-                    });
+                    const href = `/api/download/file?id=${encodeURIComponent(song.id)}&name=${encodeURIComponent(song.name)}&artists=${encodeURIComponent(song.artists)}`;
+                    const link = document.createElement('a');
+                    link.href = href;
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
 
-                    const result = await response.json();
-                    if (result.status === 'success') {
-                        // 创建隐藏的a标签触发浏览器下载
-                        const link = document.createElement('a');
-                        link.href = result.url;
-                        link.download = result.filename;
-                        link.style.display = 'none';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-
-                        successCount++;
-                        // 等待一小段时间避免同时下载太多
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    } else {
-                        failCount++;
-                        console.error(`Failed to download ${song.name}: ${result.message}`);
-                    }
+                    successCount++;
+                    await new Promise(resolve => setTimeout(resolve, 500));
                 } catch (e) {
                     failCount++;
                     console.error(`Error downloading ${song.name}:`, e);
@@ -242,35 +224,18 @@ createApp({
 
                 const songId = infoResult.id;
 
-                // 获取下载URL
-                const response = await fetch('/api/download/url', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: songId,
-                        name: singleName.value,
-                        artists: ''
-                    })
-                });
+                const href = `/api/download/file?id=${encodeURIComponent(songId)}&name=${encodeURIComponent(singleName.value)}&artists=${encodeURIComponent(singleArtists.value)}`;
+                const link = document.createElement('a');
+                link.href = href;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
 
-                const result = await response.json();
-
-                if (result.status === 'success') {
-                    // 触发浏览器下载
-                    const link = document.createElement('a');
-                    link.href = result.url;
-                    link.download = result.filename;
-                    link.style.display = 'none';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-
-                    showToast('歌曲下载已开始', 'success');
-                    singleInput.value = '';
-                    singleName.value = '';
-                } else {
-                    showToast(result.message || '下载失败', 'error');
-                }
+                showToast('歌曲下载已开始', 'success');
+                singleInput.value = '';
+                singleName.value = '';
+                singleArtists.value = '';
             } catch (e) {
                 showToast('网络请求失败', 'error');
             } finally {
@@ -318,6 +283,7 @@ createApp({
             selectedSongs,
             singleInput,
             singleName,
+            singleArtists,
             settings,
             musicSources,
             qualityOptions,

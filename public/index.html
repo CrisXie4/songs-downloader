@@ -149,6 +149,15 @@
                                 class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
                             >
                         </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">作者 (可选)</label>
+                            <input
+                                v-model="singleArtists"
+                                type="text"
+                                placeholder="用于文件名：歌曲名-作者"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
+                            >
+                        </div>
                         <button
                             @click="downloadSingle"
                             :disabled="!singleInput || downloading"
@@ -236,7 +245,17 @@
         <footer class="bg-white border-t border-gray-200 py-6">
             <div class="max-w-4xl mx-auto px-4 text-center">
                 <p class="text-sm text-gray-500 mb-2">本工具仅供个人学习与技术研究使用</p>
-                <p class="text-xs text-gray-400 mb-2">Made By CrisXie</p>
+                <div class="mb-3">
+                    <a
+                        href="https://github.com/CrisXie4"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-50 border border-red-200 text-sm font-semibold netease-red hover:bg-red-100 transition-colors"
+                    >
+                        <i class="fas fa-pen-nib"></i>
+                        <span>Made by CrisXie</span>
+                    </a>
+                </div>
                 <div class="flex justify-center space-x-4 text-xs text-gray-400">
                     <a href="https://github.com" target="_blank" class="hover:text-netease-red transition-colors">GitHub</a>
                     <span>|</span>

@@ -89,6 +89,36 @@ function sanitizeFilename(filename) {
     return filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, '').trim();
 }
 
+function contentDispositionHeader(filename) {
+    const fallback = filename.replace(/[^\x20-\x7E]/g, '_');
+    const encoded = encodeURIComponent(filename);
+    return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
+function buildFilename({ id, name, artists }) {
+    let baseName = name ? String(name).trim() : '';
+    let baseArtists = artists ? String(artists).trim() : '';
+
+    if (baseName && !baseArtists) {
+        baseArtists = '未知作者';
+    }
+
+    let filename = '';
+    if (baseName && baseArtists) {
+        filename = `${baseName}-${baseArtists}`;
+    } else if (baseName) {
+        filename = baseName;
+    } else {
+        filename = `song_${id}`;
+    }
+
+    filename = sanitizeFilename(filename);
+    if (!filename) {
+        filename = `song_${id}`;
+    }
+    return `${filename}.mp3`;
+}
+
 // 启动时加载配置
 loadConfig();
 
@@ -221,15 +251,7 @@ app.post('/api/download/url', async (req, res) => {
             });
         }
 
-        // 生成文件名
-        let filename = name;
-        if (artists) {
-            filename = `${name} - ${artists}`;
-        }
-        if (!filename) {
-            filename = `song_${id}`;
-        }
-        filename = sanitizeFilename(filename) + '.mp3';
+        const filename = buildFilename({ id, name, artists });
 
         console.log(`成功获取下载链接: ${filename}`);
 
@@ -245,6 +267,83 @@ app.post('/api/download/url', async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: '获取下载链接失败: ' + e.message
+        });
+    }
+});
+
+/**
+ * 直接触发浏览器下载（同源代理），避免跨域链接无法应用 download 文件名
+ */
+app.get('/api/download/file', async (req, res) => {
+    const id = req.query.id;
+    const name = req.query.name || '';
+    const artists = req.query.artists || '';
+
+    if (!id) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少歌曲ID'
+        });
+    }
+
+    try {
+        let audioLink = null;
+
+        if (config.api_source === 'gdstudio') {
+            const resp = await axios.get('https://music-api.gdstudio.xyz/api.php', {
+                params: {
+                    types: 'url',
+                    source: config.music_source,
+                    id: id,
+                    br: config.music_quality
+                },
+                timeout: 10000
+            });
+            audioLink = resp.data.url;
+        } else {
+            const resp = await axios.get('https://api.paugram.com/netease', {
+                params: { id: id, title: 'true' },
+                timeout: 10000
+            });
+            audioLink = resp.data.link;
+        }
+
+        if (!audioLink) {
+            return res.status(404).json({
+                status: 'error',
+                message: '未找到音频链接，该歌曲可能因版权原因无法下载'
+            });
+        }
+
+        const filename = buildFilename({ id, name, artists });
+
+        const upstream = await axios.get(audioLink, {
+            responseType: 'stream',
+            timeout: 20000,
+            maxRedirects: 5,
+            headers: {
+                'User-Agent': 'Mozilla/5.0'
+            }
+        });
+
+        res.setHeader('Content-Type', upstream.headers['content-type'] || 'audio/mpeg');
+        res.setHeader('Content-Disposition', contentDispositionHeader(filename));
+        res.setHeader('Cache-Control', 'no-store');
+
+        upstream.data.on('error', () => {
+            if (!res.headersSent) {
+                res.status(502).end();
+            } else {
+                res.end();
+            }
+        });
+
+        upstream.data.pipe(res);
+    } catch (e) {
+        const message = e?.message ? String(e.message) : '下载失败';
+        res.status(500).json({
+            status: 'error',
+            message: '下载失败: ' + message
         });
     }
 });
