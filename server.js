@@ -119,7 +119,7 @@ function buildFilenameWithExt({ id, name, artists, ext }) {
         filename = `song_${id}`;
     }
 
-    const safeExt = ext ? String(ext).trim().replace(/^\.+/, '') : '';
+    const safeExt = ext ? String(ext).trim().replace(/^\.+/ , '') : '';
     return safeExt ? `${filename}.${safeExt}` : filename;
 }
 
