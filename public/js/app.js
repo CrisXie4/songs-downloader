@@ -33,6 +33,19 @@ createApp({
             musicQuality: '999'
         });
 
+        const qqKeyword = ref('');
+        const qqType = ref('song');
+        const qqQuality = ref('128');
+        const qqSongResults = ref(null);
+        const qqSelectedMids = ref([]);
+        const qqRawResult = ref(null);
+
+        const qqQualityOptions = [
+            { label: '128k', value: '128' },
+            { label: '320k', value: '320' },
+            { label: 'FLAC', value: 'flac' }
+        ];
+
         const musicSources = [
             { id: 'netease', name: '网易云音乐' },
             { id: 'kuwo', name: '酷我音乐' },
@@ -267,6 +280,119 @@ createApp({
             }
         };
 
+        const qqSearch = async () => {
+            if (!requireAgreement()) return;
+            const keyword = String(qqKeyword.value || '').trim();
+            if (!keyword) return;
+
+            loading.value = true;
+            qqSongResults.value = null;
+            qqSelectedMids.value = [];
+            qqRawResult.value = null;
+
+            try {
+                const params = new URLSearchParams({
+                    keyword,
+                    type: qqType.value || 'song',
+                    num: '20',
+                    page: '1'
+                });
+                const response = await fetch(`/api/qq/search?${params.toString()}`);
+                const result = await response.json();
+
+                qqRawResult.value = JSON.stringify(result, null, 2);
+
+                if (qqType.value === 'song') {
+                    const list = result?.data?.list;
+                    if (!Array.isArray(list) || list.length === 0) {
+                        showToast('未找到歌曲', 'warning');
+                        return;
+                    }
+
+                    qqSongResults.value = list.map(item => {
+                        const artists = Array.isArray(item?.singer) ? item.singer.map(s => s?.name).filter(Boolean).join(', ') : '';
+                        const album = item?.album?.name ? String(item.album.name) : '';
+                        return {
+                            mid: String(item?.mid || ''),
+                            name: String(item?.name || ''),
+                            artists,
+                            album
+                        };
+                    }).filter(s => s.mid);
+
+                    qqSelectedMids.value = qqSongResults.value.map(s => s.mid);
+                    showToast(`找到 ${qqSongResults.value.length} 首歌曲`);
+                } else {
+                    showToast('查询成功');
+                }
+            } catch (e) {
+                showToast('网络请求失败', 'error');
+            } finally {
+                loading.value = false;
+            }
+        };
+
+        const qqSelectAll = () => {
+            if (qqSongResults.value) {
+                qqSelectedMids.value = qqSongResults.value.map(s => s.mid);
+            }
+        };
+
+        const qqSelectNone = () => {
+            qqSelectedMids.value = [];
+        };
+
+        const qqDownloadSelected = async () => {
+            if (!requireAgreement()) return;
+            if (!Array.isArray(qqSelectedMids.value) || qqSelectedMids.value.length === 0) return;
+            if (!Array.isArray(qqSongResults.value) || qqSongResults.value.length === 0) return;
+
+            downloading.value = true;
+
+            let successCount = 0;
+            let failCount = 0;
+            const totalSongs = qqSelectedMids.value.length;
+
+            downloadProgress.value = {
+                current: 0,
+                total: totalSongs,
+                currentSong: ''
+            };
+
+            for (const mid of qqSelectedMids.value) {
+                const song = qqSongResults.value.find(s => s.mid === mid);
+                if (!song) continue;
+
+                downloadProgress.value.currentSong = song.name;
+
+                try {
+                    const href = `/api/qq/download/file?mid=${encodeURIComponent(song.mid)}&quality=${encodeURIComponent(qqQuality.value)}&name=${encodeURIComponent(song.name)}&artists=${encodeURIComponent(song.artists)}`;
+                    const link = document.createElement('a');
+                    link.href = href;
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    successCount++;
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (e) {
+                    failCount++;
+                }
+
+                downloadProgress.value.current++;
+            }
+
+            downloading.value = false;
+            downloadProgress.value = null;
+
+            if (failCount === 0) {
+                showToast(`全部下载完成！共 ${successCount} 首`, 'success');
+            } else {
+                showToast(`下载完成: 成功 ${successCount} 首, 失败 ${failCount} 首`, 'warning');
+            }
+        };
+
         return {
             activeTab,
             loading,
@@ -287,12 +413,23 @@ createApp({
             settings,
             musicSources,
             qualityOptions,
+            qqKeyword,
+            qqType,
+            qqQuality,
+            qqQualityOptions,
+            qqSongResults,
+            qqSelectedMids,
+            qqRawResult,
             fetchPlaylist,
             selectAll,
             selectNone,
             downloadSelected,
             downloadSingle,
-            saveSettings
+            saveSettings,
+            qqSearch,
+            qqSelectAll,
+            qqSelectNone,
+            qqDownloadSelected
         };
     }
 }).mount('#app');

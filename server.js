@@ -24,6 +24,8 @@ let config = {
 const PROJECT_ROOT = path.dirname(__dirname);
 const CONFIG_FILE = path.join(PROJECT_ROOT, '.config.json');
 
+const QQ_API_BASE = 'https://api.ygking.top/api';
+
 /**
  * 加载配置文件
  */
@@ -95,7 +97,7 @@ function contentDispositionHeader(filename) {
     return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
-function buildFilename({ id, name, artists }) {
+function buildFilenameWithExt({ id, name, artists, ext }) {
     let baseName = name ? String(name).trim() : '';
     let baseArtists = artists ? String(artists).trim() : '';
 
@@ -116,7 +118,56 @@ function buildFilename({ id, name, artists }) {
     if (!filename) {
         filename = `song_${id}`;
     }
-    return `${filename}.mp3`;
+
+    const safeExt = ext ? String(ext).trim().replace(/^\.+/, '') : '';
+    return safeExt ? `${filename}.${safeExt}` : filename;
+}
+
+function buildFilename({ id, name, artists }) {
+    return buildFilenameWithExt({ id, name, artists, ext: 'mp3' });
+}
+
+async function qqApiGet(endpointPath, params) {
+    const url = `${QQ_API_BASE}${endpointPath}`;
+    const response = await axios.get(url, {
+        params,
+        timeout: 15000,
+        headers: {
+            'User-Agent': 'Mozilla/5.0'
+        }
+    });
+    return response.data;
+}
+
+function normalizeQqSongUrlFromResponse(mid, payload) {
+    const data = payload?.data ?? payload;
+    if (!data) return null;
+    if (typeof data === 'string') return data;
+    if (typeof data?.url === 'string' && data.url) return data.url;
+    if (mid && typeof data?.[mid]?.url === 'string' && data[mid].url) return data[mid].url;
+    if (mid && typeof data?.[mid] === 'string' && data[mid]) return data[mid];
+    if (Array.isArray(data)) {
+        const first = data.find(item => typeof item?.url === 'string' && item.url);
+        if (first?.url) return first.url;
+    }
+    return null;
+}
+
+function normalizeQqQuality(value) {
+    const v = String(value || '').toLowerCase();
+    if (v === '128' || v === '320' || v === 'flac') return v;
+    return '128';
+}
+
+function guessAudioExt({ quality, contentType }) {
+    const q = String(quality || '').toLowerCase();
+    if (q === 'flac') return 'flac';
+    const ct = String(contentType || '').toLowerCase();
+    if (ct.includes('flac')) return 'flac';
+    if (ct.includes('mpeg') || ct.includes('mp3')) return 'mp3';
+    if (ct.includes('aac')) return 'm4a';
+    if (ct.includes('ogg')) return 'ogg';
+    return 'mp3';
 }
 
 // 启动时加载配置
@@ -325,6 +376,287 @@ app.get('/api/download/file', async (req, res) => {
                 'User-Agent': 'Mozilla/5.0'
             }
         });
+
+        res.setHeader('Content-Type', upstream.headers['content-type'] || 'audio/mpeg');
+        res.setHeader('Content-Disposition', contentDispositionHeader(filename));
+        res.setHeader('Cache-Control', 'no-store');
+
+        upstream.data.on('error', () => {
+            if (!res.headersSent) {
+                res.status(502).end();
+            } else {
+                res.end();
+            }
+        });
+
+        upstream.data.pipe(res);
+    } catch (e) {
+        const message = e?.message ? String(e.message) : '下载失败';
+        res.status(500).json({
+            status: 'error',
+            message: '下载失败: ' + message
+        });
+    }
+});
+
+app.get('/api/qq/search', async (req, res) => {
+    const keyword = String(req.query.keyword || '').trim();
+    const type = String(req.query.type || 'song').trim();
+    const num = req.query.num;
+    const page = req.query.page;
+
+    if (!keyword) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少 keyword'
+        });
+    }
+
+    try {
+        const data = await qqApiGet('/search', {
+            keyword,
+            type,
+            num,
+            page
+        });
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({
+            status: 'error',
+            message: 'QQ API 请求失败: ' + (e?.message || 'unknown')
+        });
+    }
+});
+
+app.get('/api/qq/song/url', async (req, res) => {
+    const mid = String(req.query.mid || '').trim();
+    const quality = normalizeQqQuality(req.query.quality);
+
+    if (!mid) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少 mid'
+        });
+    }
+
+    try {
+        const data = await qqApiGet('/song/url', {
+            mid,
+            quality
+        });
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({
+            status: 'error',
+            message: 'QQ API 请求失败: ' + (e?.message || 'unknown')
+        });
+    }
+});
+
+app.get('/api/qq/song/detail', async (req, res) => {
+    const mid = String(req.query.mid || '').trim();
+    const id = req.query.id;
+
+    if (!mid && !id) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少 mid 或 id'
+        });
+    }
+
+    try {
+        const data = await qqApiGet('/song/detail', {
+            mid: mid || undefined,
+            id: id || undefined
+        });
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({
+            status: 'error',
+            message: 'QQ API 请求失败: ' + (e?.message || 'unknown')
+        });
+    }
+});
+
+app.get('/api/qq/song/cover', async (req, res) => {
+    const mid = String(req.query.mid || '').trim();
+    const album_mid = req.query.album_mid;
+    const size = req.query.size;
+    const validate = req.query.validate;
+
+    if (!mid && !album_mid) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少 mid 或 album_mid'
+        });
+    }
+
+    try {
+        const data = await qqApiGet('/song/cover', {
+            mid: mid || undefined,
+            album_mid: album_mid || undefined,
+            size: size || undefined,
+            validate: validate || undefined
+        });
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({
+            status: 'error',
+            message: 'QQ API 请求失败: ' + (e?.message || 'unknown')
+        });
+    }
+});
+
+app.get('/api/qq/lyric', async (req, res) => {
+    const mid = String(req.query.mid || '').trim();
+    const id = req.query.id;
+    const qrc = req.query.qrc;
+    const trans = req.query.trans;
+    const roma = req.query.roma;
+
+    if (!mid && !id) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少 mid 或 id'
+        });
+    }
+
+    try {
+        const data = await qqApiGet('/lyric', {
+            mid: mid || undefined,
+            id: id || undefined,
+            qrc: qrc || undefined,
+            trans: trans || undefined,
+            roma: roma || undefined
+        });
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({
+            status: 'error',
+            message: 'QQ API 请求失败: ' + (e?.message || 'unknown')
+        });
+    }
+});
+
+app.get('/api/qq/album', async (req, res) => {
+    const mid = String(req.query.mid || '').trim();
+    if (!mid) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少 mid'
+        });
+    }
+
+    try {
+        const data = await qqApiGet('/album', { mid });
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({
+            status: 'error',
+            message: 'QQ API 请求失败: ' + (e?.message || 'unknown')
+        });
+    }
+});
+
+app.get('/api/qq/playlist', async (req, res) => {
+    const id = String(req.query.id || '').trim();
+    if (!id) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少 id'
+        });
+    }
+
+    try {
+        const data = await qqApiGet('/playlist', { id });
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({
+            status: 'error',
+            message: 'QQ API 请求失败: ' + (e?.message || 'unknown')
+        });
+    }
+});
+
+app.get('/api/qq/singer', async (req, res) => {
+    const mid = String(req.query.mid || '').trim();
+    if (!mid) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少 mid'
+        });
+    }
+
+    try {
+        const data = await qqApiGet('/singer', { mid });
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({
+            status: 'error',
+            message: 'QQ API 请求失败: ' + (e?.message || 'unknown')
+        });
+    }
+});
+
+app.get('/api/qq/top', async (req, res) => {
+    const id = req.query.id;
+    const num = req.query.num;
+
+    try {
+        const data = await qqApiGet('/top', {
+            id: id || undefined,
+            num: num || undefined
+        });
+        res.json(data);
+    } catch (e) {
+        res.status(502).json({
+            status: 'error',
+            message: 'QQ API 请求失败: ' + (e?.message || 'unknown')
+        });
+    }
+});
+
+app.get('/api/qq/download/file', async (req, res) => {
+    const mid = String(req.query.mid || '').trim();
+    const name = req.query.name || '';
+    const artists = req.query.artists || '';
+    const quality = normalizeQqQuality(req.query.quality);
+    let audioLink = req.query.url ? String(req.query.url).trim() : '';
+
+    if (!mid && !audioLink) {
+        return res.status(400).json({
+            status: 'error',
+            message: '缺少 mid'
+        });
+    }
+
+    try {
+        if (!audioLink) {
+            const payload = await qqApiGet('/song/url', {
+                mid,
+                quality
+            });
+            audioLink = normalizeQqSongUrlFromResponse(mid, payload);
+        }
+
+        if (!audioLink) {
+            return res.status(404).json({
+                status: 'error',
+                message: '未找到播放链接（可能需要会员或歌曲受限）'
+            });
+        }
+
+        const upstream = await axios.get(audioLink, {
+            responseType: 'stream',
+            timeout: 25000,
+            maxRedirects: 5,
+            headers: {
+                'User-Agent': 'Mozilla/5.0'
+            }
+        });
+
+        const ext = guessAudioExt({ quality, contentType: upstream.headers['content-type'] });
+        const filename = buildFilenameWithExt({ id: mid || 'qq_song', name, artists, ext });
 
         res.setHeader('Content-Type', upstream.headers['content-type'] || 'audio/mpeg');
         res.setHeader('Content-Disposition', contentDispositionHeader(filename));

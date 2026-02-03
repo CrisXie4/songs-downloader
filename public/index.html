@@ -60,6 +60,12 @@
                 >
                     设置
                 </button>
+                <button
+                    @click="activeTab = 'qq'"
+                    :class="['px-6 py-3 text-sm font-medium transition-colors', activeTab === 'qq' ? 'tab-active' : 'text-gray-500 hover:text-gray-700']"
+                >
+                    QQ音乐
+                </button>
             </div>
 
             <!-- Playlist Download View -->
@@ -237,6 +243,109 @@
                             保存配置
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <!-- QQ Music View -->
+            <div v-if="activeTab === 'qq'" class="space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">搜索关键词</label>
+                            <input
+                                v-model="qqKeyword"
+                                type="text"
+                                placeholder="例如：周杰伦 / 青花瓷"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
+                            >
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">类型</label>
+                            <select
+                                v-model="qqType"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all bg-white"
+                            >
+                                <option value="song">歌曲</option>
+                                <option value="singer">歌手</option>
+                                <option value="album">专辑</option>
+                                <option value="playlist">歌单</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button
+                                @click="qqSearch"
+                                :disabled="loading"
+                                class="flex-1 bg-gray-800 text-white px-6 py-2 rounded-lg hover:bg-black transition-colors disabled:opacity-50 flex items-center justify-center"
+                            >
+                                <i v-if="loading" class="fas fa-spinner fa-spin mr-2"></i>
+                                搜索
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="qqType === 'song'" class="pt-4 border-t border-gray-100">
+                        <label class="block text-sm font-medium text-gray-700 mb-3">音质（用于下载）</label>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                v-for="q in qqQualityOptions"
+                                :key="q.value"
+                                @click="qqQuality = q.value"
+                                :class="['px-4 py-2 text-sm border rounded-lg transition-all', qqQuality === q.value ? 'bg-netease-red text-white border-netease-red' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300']"
+                            >
+                                {{ q.label }}
+                            </button>
+                        </div>
+                        <p class="mt-2 text-xs text-gray-400">提示：部分歌曲可能无直链（会员/版权限制），接口会返回空数据。</p>
+                    </div>
+                </div>
+
+                <div v-if="qqSongResults" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                        <h3 class="font-medium text-gray-800">找到 {{ qqSongResults.length }} 首歌曲</h3>
+                        <div class="space-x-2">
+                            <button @click="qqSelectAll" class="text-sm text-netease-red hover:underline">全选</button>
+                            <button @click="qqSelectNone" class="text-sm text-gray-500 hover:underline">取消全选</button>
+                        </div>
+                    </div>
+                    <div class="max-h-[400px] overflow-y-auto custom-scrollbar">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-2 w-10"></th>
+                                    <th class="px-4 py-2">歌曲</th>
+                                    <th class="px-4 py-2">歌手</th>
+                                    <th class="px-4 py-2">专辑</th>
+                                    <th class="px-4 py-2">MID</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <tr v-for="song in qqSongResults" :key="song.mid" class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-4 py-3">
+                                        <input type="checkbox" v-model="qqSelectedMids" :value="song.mid" class="rounded text-netease-red focus:ring-red-500">
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-gray-800">{{ song.name }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-500">{{ song.artists }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-500">{{ song.album }}</td>
+                                    <td class="px-4 py-3 text-xs text-gray-400">{{ song.mid }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-4 border-t border-gray-100 flex justify-end">
+                        <button
+                            @click="qqDownloadSelected"
+                            :disabled="qqSelectedMids.length === 0 || downloading"
+                            class="bg-netease-red text-white px-8 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
+                        >
+                            <i v-if="downloading" class="fas fa-spinner fa-spin mr-2"></i>
+                            下载选中歌曲 ({{ qqSelectedMids.length }})
+                        </button>
+                    </div>
+                </div>
+
+                <div v-else-if="qqRawResult" class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h3 class="text-sm font-medium text-gray-800 mb-3">结果预览</h3>
+                    <pre class="text-xs bg-gray-50 border border-gray-100 rounded-lg p-4 overflow-auto max-h-[500px]">{{ qqRawResult }}</pre>
                 </div>
             </div>
         </main>
